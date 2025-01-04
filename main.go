@@ -91,6 +91,7 @@ func getPlayerStat(s *discordgo.Session, i *discordgo.InteractionCreate, opts op
 
 		if err != nil {
 			builder.WriteString("cannot decode json \n")
+			builder.WriteString(err.Error())
 		} else {
 			builder.WriteString("does emojis work :sob: \n")
 			builder.WriteString("```CSS\n wait am overthinking this again``` \n")

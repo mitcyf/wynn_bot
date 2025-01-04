@@ -60,59 +60,82 @@ def download_and_convert_svgs(svg_urls, output_dir):
 
 if __name__ == "__main__":
     # List of URLs to download SVGs from
-    patterns = [
-        "SQUARE_BOTTOM_LEFT", # bottom left quad
-        "SQUARE_BOTTOM_RIGHT", # bottom right quad
-        "SQUARE_TOP_LEFT", # top left quad
-        "SQUARE_TOP_RIGHT", # top right quad
-        "STRIPE_BOTTOM", # bottom stripe
-        "STRIPE_TOP", # top stripe
-        "STRIPE_LEFT", # left stripe
-        "STRIPE_RIGHT", # right stripe
-        "STRIPE_CENTER", # vertical stripe
+    # patterns = [
+    #     "SQUARE_BOTTOM_LEFT", # bottom left quad
+    #     "SQUARE_BOTTOM_RIGHT", # bottom right quad
+    #     "SQUARE_TOP_LEFT", # top left quad
+    #     "SQUARE_TOP_RIGHT", # top right quad
+    #     "STRIPE_BOTTOM", # bottom stripe
+    #     "STRIPE_TOP", # top stripe
+    #     "STRIPE_LEFT", # left stripe
+    #     "STRIPE_RIGHT", # right stripe
+    #     "STRIPE_CENTER", # vertical stripe
 
-        "STRIPE_MIDDLE", # horizontal stripe
-        "STRIPE_DOWNRIGHT", # major diagonal
-        "STRIPE_DOWNLEFT", # minor diagonal
-        "STRIPE_SMALL", # river
-        "CROSS", # cross
-        "TRIANGLE_BOTTOM", # bottom triangle
-        "TRIANGLE_TOP", # top triangle
-        "TRIANGLES_BOTTOM", # bottom triangles
-        "TRIANGLES_TOP", # top triangles
+    #     "STRIPE_MIDDLE", # horizontal stripe
+    #     "STRIPE_DOWNRIGHT", # major diagonal
+    #     "STRIPE_DOWNLEFT", # minor diagonal
+    #     "STRIPE_SMALL", # river
+    #     "CROSS", # cross
+    #     "TRIANGLE_BOTTOM", # bottom triangle
+    #     "TRIANGLE_TOP", # top triangle
+    #     "TRIANGLES_BOTTOM", # bottom triangles
+    #     "TRIANGLES_TOP", # top triangles
 
-        "DIAGONAL_LEFT", # top left
-        "DIAGONAL_RIGHT", # bottom right
-        "DIAGONAL_LEFT_MIRROR", # bottom left
-        "DIAGONAL_RIGHT_MIRROR", # top right
-        "HALF_VERTICAL", # left half
-        "HALF_HORIZONTAL", # top half
-        "HALF_VERTICAL_MIRROR", # right half
-        "HALF_HORIZONTAL_MIRROR", # bottom half
-        "BORDER", # border
+    #     "DIAGONAL_LEFT", # top left
+    #     "DIAGONAL_RIGHT", # bottom right
+    #     "DIAGONAL_LEFT_MIRROR", # bottom left
+    #     "DIAGONAL_RIGHT_MIRROR", # top right
+    #     "HALF_VERTICAL", # left half
+    #     "HALF_HORIZONTAL", # top half
+    #     "HALF_VERTICAL_MIRROR", # right half
+    #     "HALF_HORIZONTAL_MIRROR", # bottom half
+    #     "BORDER", # border
 
-        "CREEPER", # creeper
-        "GRADIENT", # gradient down
-        "BRICKS", # bricks
-        "SKULL", # skull
-        "MOJANG", # thing
+    #     "CREEPER", # creeper
+    #     "GRADIENT", # gradient down
+    #     "BRICKS", # bricks
+    #     "SKULL", # skull
+    #     "MOJANG", # thing
 
-        "CURLY_BORDER", # triangle border
-        "STRAIGHT_CROSS", # horizontal cross
-        "GRADIENT_UP", # gradient up
-        "FLOWER", # flower
-        "RHOMBUS_MIDDLE", # rhombus
-        "CIRCLE_MIDDLE", # circle
+    #     "CURLY_BORDER", # triangle border
+    #     "STRAIGHT_CROSS", # horizontal cross
+    #     "GRADIENT_UP", # gradient up
+    #     "FLOWER", # flower
+    #     "RHOMBUS_MIDDLE", # rhombus
+    #     "CIRCLE_MIDDLE", # circle
         
+    # ]
+
+    # svg_urls = [
+    #     f"https://beta-cdn.wynncraft.com/nextgen/banners/{pattern}.svg" for pattern in patterns if pattern != ""
+    # ]
+
+    ranks = [
+        "vip",
+        "vipplus",
+        "hero",
+        "champion",
+        "media",
+        "item",
+        "moderator",
+        "administrator",
+        "builder",
+        "gamemaster",
+        "cmd",
+        "hybrid",
+        "qa",
+        "art",
+        "music",
     ]
 
     svg_urls = [
-        f"https://beta-cdn.wynncraft.com/nextgen/banners/{pattern}.svg" for pattern in patterns if pattern != ""
+        f"https://cdn.wynncraft.com/nextgen/badges/rank_{rank}.svg" for rank in ranks
     ]
 
     # Output directory for PNG files
-    output_directory = "statscard/banner"
+    output_directory = "statscard/ranks"
 
     # Run the download and conversion process
     download_and_convert_svgs(svg_urls, output_directory)
     print("All SVGs downloaded and converted to PNG!")
+

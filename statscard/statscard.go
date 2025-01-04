@@ -34,12 +34,31 @@ var colorMap = map[string]color.RGBA{
 	"WHITE":      {R: 182, G: 187, B: 186, A: 255},
 }
 
+const darkenFactor = 0.5
+
+var darkenedMap = func() map[string]color.RGBA {
+	darkened := make(map[string]color.RGBA)
+
+	for name, col := range colorMap {
+		darkened[name] = color.RGBA{
+			R: uint8(float64(col.R) * darkenFactor),
+			G: uint8(float64(col.G) * darkenFactor),
+			B: uint8(float64(col.B) * darkenFactor),
+			A: col.A, // Keep alpha unchanged
+		}
+	}
+
+	return darkened
+}()
+
+const darken = 0.5
+
 const width, height = 562, 952 // magic numbers
-const header_width, header_height = width, 118
-const image_width, image_height = width / 2, 434
-const main_width, main_height = width, height - header_height
-const banner_width, banner_height = width - image_width, height - header_height - footer_height
-const footer_width, footer_height = width, 262
+const headerWidth, headerHeight = width, 118
+const imageWidth, imageHeight = width / 2, 434
+const mainWidth, mainHeight = width, height - headerHeight
+const bannerWidth, bannerHeight = width - imageWidth, height - headerHeight - footerHeight
+const footerHidth, footerHeight = width, 262
 
 func RecolorImage(img image.Image, recolor color.RGBA) image.Image {
 	bounds := img.Bounds()
@@ -76,10 +95,10 @@ func LoadImage(filePath string) (image.Image, error) {
 }
 
 func CreateBanner(data models.PlayerData) (*gg.Context, error) {
-	api_URL := "https://api.wynncraft.com/v3/guild/%s"
+	apiURL := "https://api.wynncraft.com/v3/guild/%s"
 	guild := data.Guild.Name
 
-	url := fmt.Sprintf(api_URL, guild)
+	url := fmt.Sprintf(apiURL, guild)
 	resp, err := http.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("cannot access url")
@@ -88,32 +107,33 @@ func CreateBanner(data models.PlayerData) (*gg.Context, error) {
 
 		var guildData models.GuildData
 		err = json.NewDecoder(resp.Body).Decode(&guildData)
+		banner := gg.NewContext(bannerWidth, bannerHeight)
 
 		if err != nil {
-			return nil, fmt.Errorf("cannot decode json")
-		} else {
-			banner := gg.NewContext(banner_width, banner_height)
-
-			banner.SetColor(colorMap[guildData.Banner.Base])
+			banner.SetColor(darkenedMap["GRAY"])
 			banner.Clear()
-			banner.Scale(banner_width/160.0, banner_height/320.0)
+		} else {
+			// banner := gg.NewContext(bannerWidth, bannerHeight)
+
+			banner.SetColor(darkenedMap[guildData.Banner.Base])
+			banner.Clear()
+			banner.Scale(bannerWidth/160.0, bannerHeight/320.0)
 
 			for _, layer := range guildData.Banner.Layers {
-				color := colorMap[layer.Colour]
-				image_path := fmt.Sprintf("statscard/banner/%s.png", layer.Pattern)
-				layer_base, err := LoadImage(image_path)
+				color := darkenedMap[layer.Colour]
+				imagePath := fmt.Sprintf("statscard/banner/%s.png", layer.Pattern)
+				layerBase, err := LoadImage(imagePath)
 				if err != nil {
 					return nil, fmt.Errorf("problem loading image")
 				}
-				recolored_image := RecolorImage(layer_base, color)
+				recoloredImage := RecolorImage(layerBase, color)
 				if err != nil {
 					return nil, fmt.Errorf("cannot draw layer")
 				}
-				banner.DrawImage(recolored_image, 0, 0)
+				banner.DrawImage(recoloredImage, 0, 0)
 			}
-
-			return banner, nil
 		}
+		return banner, nil
 
 	}
 }
@@ -124,28 +144,34 @@ func CreateStatsCard(data models.PlayerData, outputDir string, fileName string) 
 
 	// background
 	card.SetColor(color.RGBA{R: 64, G: 64, B: 64, A: 255})
-	card.Clear()
+	card.Clear() // this only ends up in the footer tbh
+
+	background, err := LoadImage("statscard/images/background.png")
+	if err != nil {
+		return fmt.Errorf("failed to load background: %v", err)
+	}
+	card.DrawImage(background, 0, 0)
 
 	// boxes
-	card.SetColor(color.RGBA{R: 191, G: 166, B: 191, A: 255})
-	card.DrawRectangle(0, 0, header_width, header_height)
-	card.Fill()
+	card.SetColor(color.RGBA{R: 0, G: 0, B: 0, A: 158})
+	card.DrawRectangle(0, 0, headerWidth, headerHeight)
 
-	card.SetColor(color.RGBA{R: 15, G: 15, B: 15, A: 255})
-	card.DrawRectangle(0, header_height, image_width, image_height)
+	card.DrawRectangle(0, headerHeight+imageHeight, imageWidth, bannerHeight-imageHeight)
 	card.Fill()
 
 	// player avatar
-	avatar_img, err := fetchAvatar(data.Username)
+
+	avatarImg, err := fetchAvatar(data.Username)
 	if err != nil {
 		return fmt.Errorf("failed to fetch avatar: %v", err)
 	}
-	scaling := min(image_width/512.0, image_height/869.0)
+
+	scaling := min(imageWidth/512.0, imageHeight/869.0) * 0.9
 	avatar := gg.NewContext(int(math.Round(512*scaling)), int(math.Round(869*scaling)))
 	avatar.Scale(scaling, scaling)
-	avatar.DrawImage(avatar_img, 0, 0)
+	avatar.DrawImage(avatarImg, 0, 0)
 
-	card.DrawImageAnchored(avatar.Image(), image_width/2, header_height+image_height/2, 0.5, 0.5)
+	card.DrawImageAnchored(avatar.Image(), imageWidth/2, headerHeight+imageHeight/2, 0.5, 0.4)
 
 	// guild background
 	banner, err := CreateBanner(data)
@@ -153,7 +179,23 @@ func CreateStatsCard(data models.PlayerData, outputDir string, fileName string) 
 		return fmt.Errorf("error creating banner %v", err)
 	}
 
-	card.DrawImage(banner.Image(), image_width, header_height)
+	card.DrawImage(banner.Image(), imageWidth, headerHeight)
+
+	// header content
+	rankBadge := (*data.RankBadge)[15 : len(*data.RankBadge)-4]
+	rankImg, err := LoadImage(fmt.Sprintf("statscard/ranks/%s.png", rankBadge))
+	if err != nil {
+		return fmt.Errorf("error loading rank badge: %v", err)
+	}
+	badge := gg.NewContext(int(math.Round(headerWidth/3.0)), int(math.Round(headerHeight/3.0)))
+	badge.Scale(math.Round(headerHeight/45.0), math.Round(headerHeight/45.0))
+	badge.DrawImage(rankImg, 0, 0)
+
+	card.DrawImage(badge.Image(), 15, 10)
+
+	if err := card.LoadFontFace("/Library/Fonts/Impact.ttf", 96); err != nil {
+		panic(err)
+	}
 
 	saveErr := card.SavePNG(outputDir + "/" + fileName)
 	if saveErr != nil {

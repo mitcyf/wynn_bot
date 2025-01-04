@@ -1,28 +1,28 @@
 package models
 
 type PlayerData struct {
-	Username         string               `json:"username"`
-	Online           bool                 `json:"online"`
-	Server           string               `json:"server"`
-	ActiveCharacter  string               `json:"activeCharacter"`
-	Nickname         *string              `json:"nickname"`
-	UUID             string               `json:"uuid"`
-	Rank             string               `json:"rank"`
-	RankBadge        string               `json:"rankBadge"`
-	LegacyRankColour RankColour           `json:"legacyRankColour"`
-	ShortenedRank    *string              `json:"shortenedRank"`
-	SupportRank      string               `json:"supportRank"`
-	Veteran          *bool                `json:"veteran"`
-	FirstJoin        string               `json:"firstJoin"`
-	LastJoin         string               `json:"lastJoin"`
-	Playtime         float64              `json:"playtime"`
-	Guild            Guild                `json:"guild"`
-	GlobalData       GlobalData           `json:"globalData"`
-	ForumLink        *string              `json:"forumLink"`
-	Ranking          Ranking              `json:"ranking"`
-	PreviousRanking  Ranking              `json:"previousRanking"`
-	PublicProfile    bool                 `json:"publicProfile"`
-	Characters       map[string]Character `json:"characters"`
+	Username         string                `json:"username"`
+	Online           bool                  `json:"online"`
+	Server           *string               `json:"server"`
+	ActiveCharacter  *string               `json:"activeCharacter"`
+	Nickname         *string               `json:"nickname"`
+	UUID             string                `json:"uuid"`
+	Rank             string                `json:"rank"`
+	RankBadge        *string               `json:"rankBadge"`
+	LegacyRankColour *RankColour           `json:"legacyRankColour"`
+	ShortenedRank    *string               `json:"shortenedRank"`
+	SupportRank      *string               `json:"supportRank"`
+	Veteran          *bool                 `json:"veteran"`
+	FirstJoin        string                `json:"firstJoin"`
+	LastJoin         string                `json:"lastJoin"`
+	Playtime         float64               `json:"playtime"`
+	Guild            *Guild                `json:"guild"`
+	GlobalData       GlobalData            `json:"globalData"`
+	ForumLink        *string               `json:"forumLink"`
+	Ranking          Ranking               `json:"ranking"`
+	PreviousRanking  Ranking               `json:"previousRanking"`
+	PublicProfile    bool                  `json:"publicProfile"`
+	Characters       *map[string]Character `json:"characters"`
 }
 
 type RankColour struct {
@@ -114,7 +114,6 @@ type Character struct {
 	Logins          int                   `json:"logins"`
 	Deaths          int                   `json:"deaths"`
 	Discoveries     int                   `json:"discoveries"`
-	PreEconomy      *string               `json:"preEconomy"`
 	PvP             PvPStats              `json:"pvp"`
 	GameMode        []string              `json:"gamemode"`
 	SkillPoints     map[string]int        `json:"skillPoints"`
