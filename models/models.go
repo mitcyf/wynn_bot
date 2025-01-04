@@ -16,7 +16,7 @@ type PlayerData struct {
 	FirstJoin        string               `json:"firstJoin"`
 	LastJoin         string               `json:"lastJoin"`
 	Playtime         float64              `json:"playtime"`
-	Guild            GuildSimple          `json:"guild"`
+	Guild            Guild                `json:"guild"`
 	GlobalData       GlobalData           `json:"globalData"`
 	ForumLink        *string              `json:"forumLink"`
 	Ranking          Ranking              `json:"ranking"`
@@ -30,7 +30,7 @@ type RankColour struct {
 	Sub  string `json:"sub"`
 }
 
-type GuildSimple struct {
+type Guild struct {
 	UUID      string `json:"uuid"`
 	Name      string `json:"name"`
 	Prefix    string `json:"prefix"`
@@ -129,47 +129,68 @@ type Profession struct {
 	XPPercent int `json:"xpPercent"`
 }
 
-// Guild represents the complete guild data from the Wynncraft API.
-type Guild struct {
-	Name        string        `json:"name"`        // Guild name
-	Prefix      string        `json:"prefix"`      // Guild prefix
-	Level       float64       `json:"level"`       // Guild level
-	XP          float64       `json:"xp"`          // Total XP
-	Members     []GuildMember `json:"members"`     // List of guild members
-	Banner      GuildBanner   `json:"banner"`      // Guild banner details
-	Created     string        `json:"created"`     // Guild creation date
-	Territories int           `json:"territories"` // Number of territories controlled
-	Ranking     int           `json:"ranking"`     // Global ranking
-	UUID        string        `json:"uuid"`        // Guild unique identifier
-	Stats       GuildStats    `json:"stats"`       // Additional stats about the guild
+// GuildData idk what to say
+type GuildData struct {
+	UUID        string                `json:"uuid"`
+	Name        string                `json:"name"`
+	Prefix      string                `json:"prefix"`
+	Level       int                   `json:"level"`
+	XPPercent   int                   `json:"xpPercent"`
+	Territories int                   `json:"territories"`
+	Wars        int                   `json:"wars"`
+	Created     string                `json:"created"`
+	Members     Members               `json:"members"`
+	Online      int                   `json:"online"`
+	Banner      Banner                `json:"banner"`
+	SeasonRanks map[string]SeasonRank `json:"seasonRanks"`
 }
 
-// GuildMember represents a single member of the guild.
-type GuildMember struct {
-	Name        string  `json:"name"`        // Player name
-	Rank        string  `json:"rank"`        // Guild rank (e.g., Recruiter, Captain)
-	Contributed float64 `json:"contributed"` // XP contributed by the member
-	Joined      string  `json:"joined"`      // Date the player joined the guild
+// Members is a collection of guild member groups by rank plus total count.
+type Members struct {
+	Total      int                   `json:"total"`
+	Owner      map[string]MemberInfo `json:"owner"`
+	Chief      map[string]MemberInfo `json:"chief"`
+	Strategist map[string]MemberInfo `json:"strategist"`
+	Captain    map[string]MemberInfo `json:"captain"`
+	Recruiter  map[string]MemberInfo `json:"recruiter"`
+	Recruit    map[string]MemberInfo `json:"recruit"`
 }
 
-// GuildBanner represents the banner used by the guild.
-type GuildBanner struct {
-	Base     string        `json:"base"`     // Base color of the banner
-	Patterns []BannerLayer `json:"patterns"` // List of patterns on the banner
+// MemberInfo represents data for an individual member.
+// Note that "guildRank" and "contributionRank" are sometimes
+// present/absent depending on the rank of the member.
+type MemberInfo struct {
+	// This field corresponds to "<username/uuid>" in the original JSON.
+	// If you want to preserve it, you can rename it or parse it in manually.
+	UsernameOrUUID string  `json:"<username/uuid>"`
+	Online         bool    `json:"online"`
+	Server         *string `json:"server"` // nil if "server": null
+	Contributed    int     `json:"contributed"`
+
+	// For non-recruits:
+	GuildRank *int `json:"guildRank,omitempty"`
+	// For recruits:
+	ContributionRank *int `json:"contributionRank,omitempty"`
+
+	Joined string `json:"joined"`
 }
 
-// BannerLayer represents a single layer in the guild banner.
+// Banner defines the structure of the banner object.
+type Banner struct {
+	Base      string        `json:"base"`
+	Tier      int           `json:"tier"`
+	Structure string        `json:"structure"`
+	Layers    []BannerLayer `json:"layers"`
+}
+
+// BannerLayer describes each layer of the banner.
 type BannerLayer struct {
-	Pattern string `json:"pattern"` // Type of pattern
-	Color   string `json:"color"`   // Color of the pattern
+	Colour  string `json:"colour"`
+	Pattern string `json:"pattern"`
 }
 
-// GuildStats represents additional stats about the guild.
-type GuildStats struct {
-	MobsKilled    int `json:"mobs_killed"`    // Total mobs killed by the guild
-	PlayersKilled int `json:"players_killed"` // Total players killed by the guild
-	ChestsOpened  int `json:"chests_opened"`  // Total chests opened by guild members
-	Quests        int `json:"quests"`         // Total quests completed by guild members
-	Dungeons      int `json:"dungeons"`       // Total dungeons completed by guild members
-	Raids         int `json:"raids"`          // Total raids completed by guild members
+// SeasonRank represents each "season" entry inside "seasonRanks".
+type SeasonRank struct {
+	Rating           int `json:"rating"`
+	FinalTerritories int `json:"finalTerritories"`
 }
