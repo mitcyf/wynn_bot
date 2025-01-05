@@ -197,9 +197,6 @@ func CreateBanner(data models.PlayerData) (*gg.Context, *models.GuildData, error
 			return nil, nil, fmt.Errorf("problem loading image")
 		}
 		recoloredImage := RecolorImage(layerBase, color)
-		if err != nil {
-			return nil, nil, fmt.Errorf("cannot draw layer")
-		}
 		banner.DrawImage(recoloredImage, 0, 0)
 	}
 	if data.Guild != nil {
@@ -296,7 +293,10 @@ func CreateStatsCard(data models.PlayerData, outputDir string, fileName string) 
 
 	// rank badge
 
-	rankImg, err := LoadImage(fmt.Sprintf("statscard/ranks_upscale/rank_none.png"))
+	rankImg, err := LoadImage("statscard/ranks_upscale/rank_none.png")
+	if err != nil {
+		return fmt.Errorf("error loading none badge: %v", err)
+	}
 
 	if data.RankBadge != nil {
 		rankBadge := (*data.RankBadge)[15 : len(*data.RankBadge)-4]
