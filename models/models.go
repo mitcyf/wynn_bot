@@ -18,7 +18,7 @@ type PlayerData struct {
 	Playtime         float64               `json:"playtime"`
 	Guild            *Guild                `json:"guild"`
 	GlobalData       GlobalData            `json:"globalData"`
-	ForumLink        *string               `json:"forumLink"`
+	ForumLink        *int                  `json:"forumLink"`
 	Ranking          Ranking               `json:"ranking"`
 	PreviousRanking  Ranking               `json:"previousRanking"`
 	PublicProfile    bool                  `json:"publicProfile"`

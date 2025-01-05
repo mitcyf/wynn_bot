@@ -9,6 +9,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"time"
 
 	"wynn_bot/models"
 
@@ -51,10 +52,8 @@ var darkenedMap = func() map[string]color.RGBA {
 	return darkened
 }()
 
-const darken = 0.5
-
 const width, height = 562, 952 // magic numbers
-const headerWidth, headerHeight = width, 118
+const headerWidth, headerHeight = width, 102
 const imageWidth, imageHeight = width / 2, 434
 const mainWidth, mainHeight = width, height - headerHeight
 const bannerWidth, bannerHeight = width - imageWidth, height - headerHeight - footerHeight
@@ -94,48 +93,112 @@ func LoadImage(filePath string) (image.Image, error) {
 	return img, nil
 }
 
+func ParseTime(rawTime string) string {
+	parsedTime, err := time.Parse(time.RFC3339Nano, rawTime)
+	if err != nil {
+		fmt.Println("Error parsing time:", err)
+		return ""
+	}
+
+	return parsedTime.Format("Jan 02, 2006")
+
+}
+
+func TimeAgo(isoTimestamp string) string {
+	// Parse the ISO 8601 timestamp
+	parsedTime, err := time.Parse(time.RFC3339Nano, isoTimestamp)
+	if err != nil {
+		return "Invalid timestamp"
+	}
+
+	// Calculate the difference
+	now := time.Now()
+	duration := now.Sub(parsedTime)
+
+	// Helper function for pluralization
+	pluralize := func(value int, unit string) string {
+		if value == 1 {
+			return fmt.Sprintf("%d %s ago", value, unit) // Singular
+		}
+		return fmt.Sprintf("%d %ss ago", value, unit) // Plural
+	}
+
+	// Determine the appropriate time unit
+	if duration < time.Minute {
+		return pluralize(int(duration.Seconds()), "second")
+	} else if duration < time.Hour {
+		return pluralize(int(duration.Minutes()), "minute")
+	} else if duration < 24*time.Hour {
+		return pluralize(int(duration.Hours()), "hour")
+	} else if duration < 30*24*time.Hour {
+		return pluralize(int(duration.Hours()/24), "day")
+	} else if duration < 12*30*24*time.Hour {
+		return pluralize(int(duration.Hours()/(24*30)), "month")
+	} else {
+		return pluralize(int(duration.Hours()/(24*365)), "year")
+	}
+}
+
 func CreateBanner(data models.PlayerData) (*gg.Context, error) {
 	apiURL := "https://api.wynncraft.com/v3/guild/%s"
-	guild := data.Guild.Name
 
-	url := fmt.Sprintf(apiURL, guild)
-	resp, err := http.Get(url)
-	if err != nil {
-		return nil, fmt.Errorf("cannot access url")
-	} else {
-		defer resp.Body.Close()
+	var bannerBase string
+	var bannerLayers []models.BannerLayer
 
-		var guildData models.GuildData
-		err = json.NewDecoder(resp.Body).Decode(&guildData)
-		banner := gg.NewContext(bannerWidth, bannerHeight)
-
+	if data.Guild != nil {
+		guild := data.Guild.Name
+		url := fmt.Sprintf(apiURL, guild)
+		resp, err := http.Get(url)
 		if err != nil {
-			banner.SetColor(darkenedMap["GRAY"])
-			banner.Clear()
+			return nil, fmt.Errorf("cannot access url")
 		} else {
-			// banner := gg.NewContext(bannerWidth, bannerHeight)
+			defer resp.Body.Close()
 
-			banner.SetColor(darkenedMap[guildData.Banner.Base])
-			banner.Clear()
-			banner.Scale(bannerWidth/160.0, bannerHeight/320.0)
+			var guildData models.GuildData
+			err = json.NewDecoder(resp.Body).Decode(&guildData)
+			banner := gg.NewContext(bannerWidth, bannerHeight)
 
-			for _, layer := range guildData.Banner.Layers {
-				color := darkenedMap[layer.Colour]
-				imagePath := fmt.Sprintf("statscard/banner/%s.png", layer.Pattern)
-				layerBase, err := LoadImage(imagePath)
-				if err != nil {
-					return nil, fmt.Errorf("problem loading image")
-				}
-				recoloredImage := RecolorImage(layerBase, color)
-				if err != nil {
-					return nil, fmt.Errorf("cannot draw layer")
-				}
-				banner.DrawImage(recoloredImage, 0, 0)
+			if err != nil {
+				banner.SetColor(darkenedMap["SILVER"])
+				banner.Clear()
+			} else {
+				// banner := gg.NewContext(bannerWidth, bannerHeight)
+				bannerBase = guildData.Banner.Base
+				bannerLayers = guildData.Banner.Layers
 			}
-		}
-		return banner, nil
 
+		}
+	} else {
+		bannerBase = "SILVER"
+		bannerLayers = []models.BannerLayer{}
+
+		// modify to customize banner if no guild
+		bannerLayers = append(bannerLayers,
+			models.BannerLayer{Colour: "GRAY", Pattern: "BORDER"},
+			models.BannerLayer{Colour: "GRAY", Pattern: "MOJANG"},
+		)
 	}
+	banner := gg.NewContext(bannerWidth, bannerHeight)
+
+	banner.SetColor(darkenedMap[bannerBase])
+	banner.Clear()
+	banner.Scale(bannerWidth/160.0, bannerHeight/320.0)
+
+	for _, layer := range bannerLayers {
+		color := darkenedMap[layer.Colour]
+		imagePath := fmt.Sprintf("statscard/banner/%s.png", layer.Pattern)
+		layerBase, err := LoadImage(imagePath)
+		if err != nil {
+			return nil, fmt.Errorf("problem loading image")
+		}
+		recoloredImage := RecolorImage(layerBase, color)
+		if err != nil {
+			return nil, fmt.Errorf("cannot draw layer")
+		}
+		banner.DrawImage(recoloredImage, 0, 0)
+	}
+
+	return banner, nil
 }
 
 func CreateStatsCard(data models.PlayerData, outputDir string, fileName string) error {
@@ -171,7 +234,7 @@ func CreateStatsCard(data models.PlayerData, outputDir string, fileName string) 
 	avatar.Scale(scaling, scaling)
 	avatar.DrawImage(avatarImg, 0, 0)
 
-	card.DrawImageAnchored(avatar.Image(), imageWidth/2, headerHeight+imageHeight/2, 0.5, 0.4)
+	card.DrawImageAnchored(avatar.Image(), imageWidth/2, headerHeight+imageHeight/2, 0.5, 0.5)
 
 	// guild background
 	banner, err := CreateBanner(data)
@@ -182,20 +245,58 @@ func CreateStatsCard(data models.PlayerData, outputDir string, fileName string) 
 	card.DrawImage(banner.Image(), imageWidth, headerHeight)
 
 	// header content
-	rankBadge := (*data.RankBadge)[15 : len(*data.RankBadge)-4]
-	rankImg, err := LoadImage(fmt.Sprintf("statscard/ranks/%s.png", rankBadge))
-	if err != nil {
-		return fmt.Errorf("error loading rank badge: %v", err)
+
+	// rank badge
+
+	rankImg, err := LoadImage(fmt.Sprintf("statscard/ranks_upscale/rank_none.png"))
+
+	if data.RankBadge != nil {
+		rankBadge := (*data.RankBadge)[15 : len(*data.RankBadge)-4]
+		rankImg, err = LoadImage(fmt.Sprintf("statscard/ranks_upscale/%s.png", rankBadge))
+		if err != nil {
+			return fmt.Errorf("error loading rank badge: %v", err)
+		}
+	} else {
+
 	}
-	badge := gg.NewContext(int(math.Round(headerWidth/3.0)), int(math.Round(headerHeight/3.0)))
-	badge.Scale(math.Round(headerHeight/45.0), math.Round(headerHeight/45.0))
+	badge := gg.NewContext(int(math.Round(headerWidth/2.0)), int(math.Round(headerHeight/3.0)))
+	// badge.Scale(math.Round(headerHeight/30.0), math.Round(headerHeight/30.0))
 	badge.DrawImage(rankImg, 0, 0)
 
-	card.DrawImage(badge.Image(), 15, 10)
+	card.DrawImageAnchored(badge.Image(), 15, 30, 0, 0.5)
 
-	if err := card.LoadFontFace("/Library/Fonts/Impact.ttf", 96); err != nil {
+	// text
+
+	if data.LegacyRankColour != nil {
+		card.SetHexColor(data.LegacyRankColour.Sub)
+	} else {
+		card.SetColor(color.RGBA{R: 221, G: 225, B: 218, A: 255})
+	}
+
+	if err := card.LoadFontFace("statscard/fonts/minecraft.ttf", 42); err != nil {
 		panic(err)
 	}
+	card.DrawStringAnchored(data.Username, float64(rankImg.Bounds().Max.X)+30, 30, 0, 0.4)
+
+	subtitle1 := ""
+	subtitle2 := "" // line breaks don't work with gg for some reason
+	subtitle1 += "first joined " + ParseTime(data.FirstJoin)
+	if data.Online {
+		subtitle2 += "currently online on world " + *data.Server
+	} else {
+		subtitle2 += "last seen " + TimeAgo(data.LastJoin)
+		if data.Server != nil {
+			subtitle2 += " on world " + *data.Server
+		}
+	}
+	card.SetColor(color.RGBA{R: 221, G: 225, B: 218, A: 255})
+	if err := card.LoadFontFace("statscard/fonts/comfortaa.ttf", 16); err != nil {
+		panic(err)
+	}
+	card.DrawStringAnchored(subtitle1, 20, float64(rankImg.Bounds().Max.Y)+32, 0, 0)
+	card.DrawStringAnchored(subtitle2, 20, float64(rankImg.Bounds().Max.Y)+55, 0, 0)
+
+	// saving the image
 
 	saveErr := card.SavePNG(outputDir + "/" + fileName)
 	if saveErr != nil {
