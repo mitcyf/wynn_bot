@@ -229,20 +229,21 @@ func drawPieChart(card *gg.Context, x, y, outerRadius, innerRadius float64, data
 	}
 
 	startAngle := rand.Float64() * 2 * math.Pi
-	fmt.Println("trying to pie chart")
 	for key, value := range data {
-		percentage := float64(value) / float64(total)
-		endAngle := startAngle + (percentage * 2 * math.Pi)
+		if value > 0 {
+			percentage := float64(value) / float64(total)
+			endAngle := startAngle + (percentage * 2 * math.Pi)
 
-		card.SetHexColor(colors[key])
-		card.MoveTo(x, y)
-		card.DrawArc(x, y, outerRadius, startAngle, endAngle)
-		card.LineTo(x+innerRadius*math.Cos(endAngle), y+innerRadius*math.Sin(endAngle))
-		card.DrawArc(x, y, innerRadius, endAngle, startAngle)
-		card.ClosePath()
-		card.Fill()
+			card.SetHexColor(colors[key])
+			card.MoveTo(x, y)
+			card.DrawArc(x, y, outerRadius, startAngle, endAngle)
+			card.LineTo(x+innerRadius*math.Cos(endAngle), y+innerRadius*math.Sin(endAngle))
+			card.DrawArc(x, y, innerRadius, endAngle, startAngle)
+			card.ClosePath()
+			card.Fill()
 
-		startAngle = endAngle
+			startAngle = endAngle
+		}
 	}
 }
 
@@ -490,17 +491,17 @@ func CreateStatsCard(data models.PlayerData, outputDir string, fileName string) 
 
 	labels["completion"] = "completion"
 	labelsY["completion"] = leaderboardsY + spacing
-	valuesRight["completion"] = strconv.Itoa(data.Ranking.GlobalPlayerContent)
+	valuesRight["completion"] = "#" + strconv.Itoa(data.Ranking.GlobalPlayerContent)
 	valuesRightY["completion"] = leaderboardsY + spacing
 
 	labels["professions"] = "professions"
 	labelsY["professions"] = leaderboardsY + spacing*2
-	valuesRight["professions"] = strconv.Itoa(data.Ranking.ProfessionsGlobalLevel)
+	valuesRight["professions"] = "#" + strconv.Itoa(data.Ranking.ProfessionsGlobalLevel)
 	valuesRightY["professions"] = leaderboardsY + spacing*2
 
 	labels["wars won"] = "wars won"
 	labelsY["wars won"] = leaderboardsY + spacing*4
-	valuesRight["wars won"] = strconv.Itoa(data.Ranking.WarsCompletion)
+	valuesRight["wars won"] = "#" + strconv.Itoa(data.Ranking.WarsCompletion)
 	valuesRightY["wars won"] = leaderboardsY + spacing*4
 
 	card.SetColor(color.RGBA{R: 0, G: 0, B: 0, A: 91})
@@ -541,6 +542,82 @@ func CreateStatsCard(data models.PlayerData, outputDir string, fileName string) 
 		"tcc": tcc,
 		"tna": tna,
 	}, raidsColor)
+
+	footerImg, err := LoadImage("statscard/images/footer.png")
+	if err != nil {
+		return fmt.Errorf("cannot load footer image")
+	}
+	card.DrawImage(footerImg, 0, height-footerHeight)
+
+	if err := card.LoadFontFace("statscard/fonts/comfortaa_bold.ttf", 24); err != nil {
+		panic(err)
+	}
+	card.SetHexColor("#ffffff")
+	card.DrawStringAnchored("completion", width/2, height-footerHeight+40, 0.5, 0)
+
+	classes := []string{
+		"ARCHER",
+		"WARRIOR",
+		"ASSASSIN",
+		"MAGE",
+		"SHAMAN",
+	}
+
+	levels := map[string]int{
+		"ARCHER":   0,
+		"WARRIOR":  0,
+		"ASSASSIN": 0,
+		"MAGE":     0,
+		"SHAMAN":   0,
+	}
+
+	classColors := map[string]string{ // hsv sat 70 val 70, 50
+		"ARCHER":   "#8936b3",
+		"WARRIOR":  "#b34036",
+		"ASSASSIN": "#36b3b3",
+		"MAGE":     "#b38936",
+		"SHAMAN":   "#5fb336",
+	}
+	classPerfectionColors := map[string]string{
+		"ARCHER":   "#622680",
+		"WARRIOR":  "#802e26",
+		"ASSASSIN": "#268080",
+		"MAGE":     "#806226",
+		"SHAMAN":   "#448026",
+	}
+	for _, char := range data.Characters {
+		if char.Level > levels[char.Type] {
+			levels[char.Type] = char.Level
+		}
+	}
+
+	card.LoadFontFace("statscard/fonts/minecraft.ttf", 22)
+
+	for index, class := range classes {
+		x := float64(index)*width/5.0 + width/10.0
+		y := height - footerHeight + 120.0
+		drawPieChart(card, x, y, 45, 35, map[string]int{
+			"lvl": levels[class],
+			"rem": 105 - levels[class],
+		}, map[string]string{
+			"lvl": classColors[class],
+			"rem": "#000000",
+		})
+		if levels[class] == 106 {
+			drawPieChart(card, x, y, 35, 30, map[string]int{
+				"": 1,
+			}, map[string]string{
+				"": classPerfectionColors[class],
+			})
+		}
+		classImg, err := LoadImage(fmt.Sprintf("statscard/classes/%s.png", class))
+		if err != nil {
+			// return fmt.Errorf("cannot load class images for " + class)
+		}
+		card.DrawImageAnchored(classImg, int(math.Round(x)), int(math.Round(y)-11), 0.5, 0.5)
+		card.SetHexColor(classColors[class])
+		card.DrawStringAnchored(strconv.Itoa(levels[class]), x, y+11, 0.5, 0.5)
+	}
 
 	// saving the image
 

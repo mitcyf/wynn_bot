@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
+	"time"
 
 	"wynn_bot/models"
 	"wynn_bot/statscard"
@@ -72,8 +72,17 @@ var commands = []*discordgo.ApplicationCommand{
 }
 
 func getPlayerStat(s *discordgo.Session, i *discordgo.InteractionCreate, opts optionMap) {
-	builder := new(strings.Builder)
-	// builder.WriteString(opts["username"].StringValue() + "\n")
+	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content: "Generating stats card, please wait...",
+		},
+	})
+
+	if err != nil {
+		log.Panicf("could not respond to interaction: %s", err)
+		return
+	}
 
 	api_URL := "https://api.wynncraft.com/v3/player/%s?fullResult"
 	username := opts["username"].StringValue()
@@ -81,39 +90,75 @@ func getPlayerStat(s *discordgo.Session, i *discordgo.InteractionCreate, opts op
 	url := fmt.Sprintf(api_URL, username)
 	resp, err := http.Get(url)
 	if err != nil {
-		builder.WriteString("cannot access url \n")
-	} else {
-		builder.WriteString("accessing: " + url + "\n")
-		defer resp.Body.Close()
+		log.Printf("Failed to access URL: %s", err)
+		_, _ = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+			Content: stringPointer("Failed to access the player data URL."),
+		})
+		return
+	}
+	defer resp.Body.Close()
 
-		var playerData models.PlayerData
-		err = json.NewDecoder(resp.Body).Decode(&playerData)
-
-		if err != nil {
-			builder.WriteString("cannot decode json \n")
-			builder.WriteString(err.Error())
-		} else {
-			builder.WriteString("does emojis work :sob: \n")
-			builder.WriteString("```CSS\n wait am overthinking this again``` \n")
-
-			statscard.CreateStatsCard(playerData, "statscard/images", "testing.png")
-
-			fmt.Printf("Debug output: %+v\n", &playerData.Guild)
-
-		}
-
+	var playerData models.PlayerData
+	err = json.NewDecoder(resp.Body).Decode(&playerData)
+	if err != nil {
+		log.Printf("Failed to decode JSON: %s", err)
+		_, _ = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+			Content: stringPointer("Failed to decode player data JSON."),
+		})
+		return
 	}
 
-	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{
-			Content: builder.String(),
-		},
-	})
+	// Generate the stats card
+	imagePath := "statcard.png"
+	err = statscard.CreateStatsCard(playerData, "statscard/images", imagePath)
+	if err != nil {
+		log.Printf("Failed to generate stats card: %s", err)
+		_, _ = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+			Content: stringPointer("Failed to generate stats card."),
+		})
+		return
+	}
+
+	// Open the generated image
+	file, err := os.Open("statscard/images/statcard.png")
+	if err != nil {
+		log.Printf("Failed to open stats card: %s", err)
+		_, _ = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+			Content: stringPointer("Failed to open the generated stats card."),
+		})
+		return
+	}
+	defer file.Close()
+
+	// Retry logic for editing the response
+	maxRetries := 5
+	for attempts := 0; attempts < maxRetries; attempts++ {
+		_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+			Content: stringPointer(""),
+			Files: []*discordgo.File{
+				{
+					Name:   "statcard.png",
+					Reader: file,
+				},
+			},
+		})
+		if err == nil {
+			break // Success
+		}
+		log.Printf("Retry %d: Failed to edit interaction response with image: %s", attempts+1, err)
+		time.Sleep(time.Second) // Wait before retrying
+	}
 
 	if err != nil {
-		log.Panicf("could not respond to interaction: %s", err)
+		log.Printf("Failed to edit interaction response after retries: %s", err)
+		_, _ = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+			Content: stringPointer("Failed to edit interaction response after multiple attempts."),
+		})
 	}
+}
+
+func stringPointer(s string) *string {
+	return &s
 }
 
 // messageCreate is a handler function that processes new messages.
