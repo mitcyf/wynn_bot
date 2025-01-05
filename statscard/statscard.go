@@ -7,8 +7,11 @@ import (
 	"image/color"
 	"image/png"
 	"math"
+	"math/rand"
 	"net/http"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"wynn_bot/models"
@@ -55,7 +58,8 @@ var darkenedMap = func() map[string]color.RGBA {
 const width, height = 562, 952 // magic numbers
 const headerWidth, headerHeight = width, 102
 const imageWidth, imageHeight = width / 2, 434
-const mainWidth, mainHeight = width, height - headerHeight
+
+// const mainWidth, mainHeight = width, height - headerHeight
 const bannerWidth, bannerHeight = width - imageWidth, height - headerHeight - footerHeight
 const footerHidth, footerHeight = width, 262
 
@@ -139,22 +143,23 @@ func TimeAgo(isoTimestamp string) string {
 	}
 }
 
-func CreateBanner(data models.PlayerData) (*gg.Context, error) {
+func CreateBanner(data models.PlayerData) (*gg.Context, *models.GuildData, error) {
 	apiURL := "https://api.wynncraft.com/v3/guild/%s"
 
 	var bannerBase string
 	var bannerLayers []models.BannerLayer
+	var guildData *models.GuildData
 
 	if data.Guild != nil {
 		guild := data.Guild.Name
 		url := fmt.Sprintf(apiURL, guild)
 		resp, err := http.Get(url)
 		if err != nil {
-			return nil, fmt.Errorf("cannot access url")
+			return nil, nil, fmt.Errorf("cannot access url")
 		} else {
 			defer resp.Body.Close()
 
-			var guildData models.GuildData
+			// var guildData models.GuildData
 			err = json.NewDecoder(resp.Body).Decode(&guildData)
 			banner := gg.NewContext(bannerWidth, bannerHeight)
 
@@ -189,16 +194,59 @@ func CreateBanner(data models.PlayerData) (*gg.Context, error) {
 		imagePath := fmt.Sprintf("statscard/banner/%s.png", layer.Pattern)
 		layerBase, err := LoadImage(imagePath)
 		if err != nil {
-			return nil, fmt.Errorf("problem loading image")
+			return nil, nil, fmt.Errorf("problem loading image")
 		}
 		recoloredImage := RecolorImage(layerBase, color)
 		if err != nil {
-			return nil, fmt.Errorf("cannot draw layer")
+			return nil, nil, fmt.Errorf("cannot draw layer")
 		}
 		banner.DrawImage(recoloredImage, 0, 0)
 	}
+	if data.Guild != nil {
+		return banner, guildData, nil
+	} else {
+		return banner, nil, nil
+	}
+}
 
-	return banner, nil
+func formatNumber(n float64) string {
+	if n >= 1e9 {
+		return fmt.Sprintf("%.1fB", n/1e9)
+	} else if n >= 1e6 {
+		return fmt.Sprintf("%.1fM", n/1e6)
+	} else if n >= 1e3 {
+		return fmt.Sprintf("%.1fK", n/1e3)
+	} else {
+		return fmt.Sprintf("%.1f", n) // For numbers less than 1, use default formatting
+	}
+}
+
+func drawPieChart(card *gg.Context, x, y, outerRadius, innerRadius float64, data map[string]int, colors map[string]string) {
+	total := 0
+	for _, value := range data {
+		total += value
+	}
+
+	if total == 0 {
+		return
+	}
+
+	startAngle := rand.Float64() * 2 * math.Pi
+	fmt.Println("trying to pie chart")
+	for key, value := range data {
+		percentage := float64(value) / float64(total)
+		endAngle := startAngle + (percentage * 2 * math.Pi)
+
+		card.SetHexColor(colors[key])
+		card.MoveTo(x, y)
+		card.DrawArc(x, y, outerRadius, startAngle, endAngle)
+		card.LineTo(x+innerRadius*math.Cos(endAngle), y+innerRadius*math.Sin(endAngle))
+		card.DrawArc(x, y, innerRadius, endAngle, startAngle)
+		card.ClosePath()
+		card.Fill()
+
+		startAngle = endAngle
+	}
 }
 
 func CreateStatsCard(data models.PlayerData, outputDir string, fileName string) error {
@@ -206,7 +254,7 @@ func CreateStatsCard(data models.PlayerData, outputDir string, fileName string) 
 	card := gg.NewContext(width, height)
 
 	// background
-	card.SetColor(color.RGBA{R: 64, G: 64, B: 64, A: 255})
+	card.SetColor(color.RGBA{R: 19, G: 0, B: 25, A: 255})
 	card.Clear() // this only ends up in the footer tbh
 
 	background, err := LoadImage("statscard/images/background.png")
@@ -216,7 +264,7 @@ func CreateStatsCard(data models.PlayerData, outputDir string, fileName string) 
 	card.DrawImage(background, 0, 0)
 
 	// boxes
-	card.SetColor(color.RGBA{R: 0, G: 0, B: 0, A: 158})
+	card.SetColor(color.RGBA{R: 0, G: 0, B: 0, A: 120})
 	card.DrawRectangle(0, 0, headerWidth, headerHeight)
 
 	card.DrawRectangle(0, headerHeight+imageHeight, imageWidth, bannerHeight-imageHeight)
@@ -237,7 +285,7 @@ func CreateStatsCard(data models.PlayerData, outputDir string, fileName string) 
 	card.DrawImageAnchored(avatar.Image(), imageWidth/2, headerHeight+imageHeight/2, 0.5, 0.5)
 
 	// guild background
-	banner, err := CreateBanner(data)
+	banner, guild, err := CreateBanner(data)
 	if err != nil {
 		return fmt.Errorf("error creating banner %v", err)
 	}
@@ -289,12 +337,210 @@ func CreateStatsCard(data models.PlayerData, outputDir string, fileName string) 
 			subtitle2 += " on world " + *data.Server
 		}
 	}
-	card.SetColor(color.RGBA{R: 221, G: 225, B: 218, A: 255})
-	if err := card.LoadFontFace("statscard/fonts/comfortaa.ttf", 16); err != nil {
+	card.SetColor(color.RGBA{R: 255, G: 255, B: 255, A: 255})
+	if err := card.LoadFontFace("statscard/fonts/comfortaa_bold.ttf", 16); err != nil {
 		panic(err)
 	}
 	card.DrawStringAnchored(subtitle1, 20, float64(rankImg.Bounds().Max.Y)+32, 0, 0)
 	card.DrawStringAnchored(subtitle2, 20, float64(rankImg.Bounds().Max.Y)+55, 0, 0)
+
+	// guild content
+
+	if guild != nil {
+
+		guild1 := strings.ToLower(data.Guild.Rank) + " of " + guild.Prefix
+
+		// this is such a stupid data structure but idk if fixing it to solve the problem once is worth it
+		memberInfo := models.MemberInfo{}
+		if data.Guild.Rank == "OWNER" {
+			memberInfo = guild.Members.Owner[data.Username]
+		} else if data.Guild.Rank == "CHIEF" {
+			memberInfo = guild.Members.Chief[data.Username]
+		} else if data.Guild.Rank == "STRATEGIST" {
+			memberInfo = guild.Members.Strategist[data.Username]
+		} else if data.Guild.Rank == "CAPTAIN" {
+			memberInfo = guild.Members.Captain[data.Username]
+		} else if data.Guild.Rank == "RECRUITER" {
+			memberInfo = guild.Members.Recruiter[data.Username]
+		} else if data.Guild.Rank == "RECRUIT" {
+			memberInfo = guild.Members.Recruit[data.Username]
+		}
+		fmt.Println(memberInfo.Joined)
+
+		guild2 := "since " + ParseTime(memberInfo.Joined)
+		guild3 := guild.Name + ", lv " + strconv.Itoa(guild.Level)
+		guild4 := formatNumber(float64(memberInfo.Contributed)) + " xp contributed (#" + strconv.Itoa(*memberInfo.ContributionRank) + ")"
+
+		if err := card.LoadFontFace("statscard/fonts/comfortaa_bold.ttf", 20); err != nil {
+			panic(err)
+		}
+		card.DrawStringAnchored(guild1, 20, imageHeight+headerHeight+30, 0, 0.5)
+
+		if err := card.LoadFontFace("statscard/fonts/comfortaa_bold.ttf", 15); err != nil {
+			panic(err)
+		}
+		card.DrawStringAnchored(guild2, 20, imageHeight+headerHeight+60, 0, 0.5)
+		card.DrawStringAnchored(guild3, 20, imageHeight+headerHeight+80, 0, 0.5)
+
+		card.DrawStringAnchored(guild4, 20, imageHeight+headerHeight+120, 0, 0.5)
+	}
+
+	// main content
+
+	// could this have been cleaner? yes. did i know struct when I started this? no
+	// should've cleaned this up instead of just slapping it into new renderer
+	// whatever, ugly code still does the job
+
+	headers := make(map[string]string)
+	headersY := make(map[string]int)
+	labels := make(map[string]string)
+	labelsY := make(map[string]int)
+	raids := make(map[string]string)
+	raidsY := make(map[string]int)
+	raidsColor := make(map[string]string)
+	valuesRight := make(map[string]string)
+	valuesRightY := make(map[string]int)
+	valuesLeft := make(map[string]string)
+	valuesLeftY := make(map[string]int)
+
+	nog := data.GlobalData.Raids.List["Nest of the Grootslangs"]
+	nol := data.GlobalData.Raids.List["Orphion's Nexus of Light"]
+	tcc := data.GlobalData.Raids.List["The Canyon Colossus"]
+	tna := data.GlobalData.Raids.List["The Nameless Anomaly"]
+
+	headers["player stats"] = "player stats"
+	headersY["player stats"] = 40
+
+	spacing := 22
+	statsY := headersY["player stats"] + 5
+
+	labels["playtime"] = "playtime"
+	labelsY["playtime"] = statsY + spacing
+	valuesRight["playtime"] = strconv.Itoa(int(math.Round(data.Playtime))) + " hr"
+	valuesRightY["playtime"] = statsY + spacing
+
+	labels["total levels"] = "total levels"
+	labelsY["total levels"] = statsY + spacing*2
+	valuesRight["total levels"] = strconv.Itoa(data.GlobalData.TotalLevel)
+	valuesRightY["total levels"] = statsY + spacing*2
+
+	labels["kills"] = "kills"
+	labelsY["kills"] = statsY + spacing*4
+	valuesRight["kills"] = strconv.Itoa(data.GlobalData.KilledMobs)
+	valuesRightY["kills"] = statsY + spacing*4
+
+	labels["chests"] = "chests"
+	labelsY["chests"] = statsY + spacing*5
+	valuesRight["chests"] = strconv.Itoa(data.GlobalData.ChestsFound)
+	valuesRightY["chests"] = statsY + spacing*5
+
+	labels["dungeons"] = "dungeons"
+	labelsY["dungeons"] = statsY + spacing*6
+	valuesRight["dungeons"] = strconv.Itoa(data.GlobalData.Dungeons.Total)
+	valuesRightY["dungeons"] = statsY + spacing*6
+
+	labels["quests"] = "quests"
+	labelsY["quests"] = statsY + spacing*7
+	valuesRight["quests"] = strconv.Itoa(data.GlobalData.CompletedQuests)
+	valuesRightY["quests"] = statsY + spacing*7
+
+	labels["wars"] = "wars"
+	labelsY["wars"] = statsY + spacing*9
+	valuesRight["wars"] = strconv.Itoa(data.GlobalData.Wars)
+	valuesRightY["wars"] = statsY + spacing*9
+
+	headers["raid completions"] = "raids completions"
+	headersY["raid completions"] = statsY + spacing*11
+
+	raidsYCoord := headersY["raid completions"] + 5
+
+	labels["total"] = "total"
+	labelsY["total"] = raidsYCoord + spacing
+	valuesLeft["total"] = strconv.Itoa(data.GlobalData.Raids.Total)
+	valuesLeftY["total"] = raidsYCoord + spacing
+
+	labels["nog"] = "nog"
+	labelsY["nog"] = raidsYCoord + spacing*3
+	raids["nog"] = strconv.Itoa(nog)
+	raidsY["nog"] = raidsYCoord + spacing*3
+	raidsColor["nog"] = "#93c47d"
+
+	labels["nol"] = "nol"
+	labelsY["nol"] = raidsYCoord + spacing*4
+	raids["nol"] = strconv.Itoa(nol)
+	raidsY["nol"] = raidsYCoord + spacing*4
+	raidsColor["nol"] = "#ffd966"
+
+	labels["tcc"] = "tcc"
+	labelsY["tcc"] = raidsYCoord + spacing*5
+	raids["tcc"] = strconv.Itoa(tcc)
+	raidsY["tcc"] = raidsYCoord + spacing*5
+	raidsColor["tcc"] = "#e06666"
+
+	labels["tna"] = "tna"
+	labelsY["tna"] = raidsYCoord + spacing*6
+	raids["tna"] = strconv.Itoa(tna)
+	raidsY["tna"] = raidsYCoord + spacing*6
+	raidsColor["tna"] = "#8e7cc3"
+
+	headers["leaderboards"] = "leaderboards"
+	headersY["leaderboards"] = raidsYCoord + spacing*8
+
+	leaderboardsY := headersY["leaderboards"] + 5
+
+	labels["completion"] = "completion"
+	labelsY["completion"] = leaderboardsY + spacing
+	valuesRight["completion"] = strconv.Itoa(data.Ranking.GlobalPlayerContent)
+	valuesRightY["completion"] = leaderboardsY + spacing
+
+	labels["professions"] = "professions"
+	labelsY["professions"] = leaderboardsY + spacing*2
+	valuesRight["professions"] = strconv.Itoa(data.Ranking.ProfessionsGlobalLevel)
+	valuesRightY["professions"] = leaderboardsY + spacing*2
+
+	labels["wars won"] = "wars won"
+	labelsY["wars won"] = leaderboardsY + spacing*4
+	valuesRight["wars won"] = strconv.Itoa(data.Ranking.WarsCompletion)
+	valuesRightY["wars won"] = leaderboardsY + spacing*4
+
+	card.SetColor(color.RGBA{R: 0, G: 0, B: 0, A: 91})
+	card.DrawRoundedRectangle(10+imageWidth, float64(statsY)+float64(spacing)*3.5+2, width-imageWidth-20, float64(spacing)*11-5, 15)
+	card.DrawRoundedRectangle(10+imageWidth, float64(raidsYCoord)+float64(spacing)*3.5+2, width-imageWidth-20, float64(spacing)*8-5, 15)
+	card.DrawRoundedRectangle(10+imageWidth, float64(leaderboardsY)+float64(spacing)*3.5+2, width-imageWidth-20, float64(spacing)*6-5, 15)
+	card.Fill()
+
+	card.SetHexColor("#FFFFFF")
+
+	if err := card.LoadFontFace("statscard/fonts/comfortaa_bold.ttf", 24); err != nil {
+		panic(err)
+	}
+	for key, y := range headersY {
+		card.DrawStringAnchored(headers[key], 20+imageWidth, headerHeight+float64(y), 0, 0.5)
+	}
+
+	if err := card.LoadFontFace("statscard/fonts/comfortaa_bold.ttf", 16); err != nil {
+		panic(err)
+	}
+	for key, y := range labelsY {
+		card.DrawStringAnchored(labels[key], 20+imageWidth, headerHeight+float64(y), 0, 0.5)
+	}
+	for key, y := range valuesRightY {
+		card.DrawStringAnchored(valuesRight[key], 20+imageWidth+160, headerHeight+float64(y), 0, 0.5)
+	}
+	for key, y := range valuesLeftY {
+		card.DrawStringAnchored(valuesLeft[key], 20+imageWidth+90, headerHeight+float64(y), 0, 0.5)
+	}
+	for key, y := range raidsY {
+		card.SetHexColor(raidsColor[key])
+		card.DrawStringAnchored(raids[key], 20+imageWidth+90, headerHeight+float64(y), 0, 0.5)
+	}
+
+	drawPieChart(card, 490, float64(raidsYCoord+180), 45, 35, map[string]int{
+		"nog": nog,
+		"nol": nol,
+		"tcc": tcc,
+		"tna": tna,
+	}, raidsColor)
 
 	// saving the image
 
