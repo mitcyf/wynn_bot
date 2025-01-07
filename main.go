@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"wynn_bot/chartings"
 	"wynn_bot/models"
 	"wynn_bot/statscard"
 
@@ -64,6 +65,18 @@ var commands = []*discordgo.ApplicationCommand{
 			{
 				Name:        "username",
 				Description: "The player's username or uuid.",
+				Type:        discordgo.ApplicationCommandOptionString,
+				Required:    true,
+			},
+		},
+	},
+	{
+		Name:        "charttest",
+		Description: "Testing command for the charting function",
+		Options: []*discordgo.ApplicationCommandOption{
+			{
+				Name:        "test",
+				Description: "not used",
 				Type:        discordgo.ApplicationCommandOptionString,
 				Required:    true,
 			},
@@ -157,6 +170,66 @@ func getPlayerStat(s *discordgo.Session, i *discordgo.InteractionCreate, opts op
 	}
 }
 
+func ChartTest(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content: "Chart generating, please wait...",
+		},
+	})
+	if err != nil {
+		log.Printf("Could not respond to interaction: %s", err)
+		return
+	}
+
+	// Example chart data
+	data := &chartings.ChartData{
+		X:        []float64{1, 2, 3, 4, 5},
+		Y:        []float64{10, 20, 15, 25, 30},
+		XLegends: []string{"A", "B", "C", "D", "E"},
+		YLegends: []string{"Low", "Medium", "High", "Very High"},
+		XLabel:   "Categories",
+		YLabel:   "Values",
+		Title:    "Test Chart",
+		Desc:     "This is a test chart",
+	}
+
+	buffer, err := chartings.Render(data)
+	if err != nil {
+		log.Printf("Failed to render chart: %s", err)
+		_, _ = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+			Content: stringPointer("Failed to generate chart."),
+		})
+		return
+	}
+
+	// Retry logic for editing the response
+	maxRetries := 5
+	for attempts := 0; attempts < maxRetries; attempts++ {
+		_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+			Content: stringPointer("Chart generated!"),
+			Files: []*discordgo.File{
+				{
+					Name:   "chart.png",
+					Reader: buffer,
+				},
+			},
+		})
+		if err == nil {
+			break // Success
+		}
+		log.Printf("Retry %d: Failed to edit interaction response with image: %s", attempts+1, err)
+		time.Sleep(time.Second) // Wait before retrying
+	}
+
+	if err != nil {
+		log.Printf("Failed to edit interaction response after retries: %s", err)
+		_, _ = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+			Content: stringPointer("Failed to edit interaction response after multiple attempts."),
+		})
+	}
+}
+
 func stringPointer(s string) *string {
 	return &s
 }
@@ -203,11 +276,12 @@ func main() {
 		}
 
 		data := i.ApplicationCommandData()
-		if data.Name != "stats" {
-			return
+		if data.Name == "stats" {
+			getPlayerStat(s, i, parseOptions(data.Options))
+		} else if data.Name == "charttest" {
+
 		}
 
-		getPlayerStat(s, i, parseOptions(data.Options))
 	})
 
 	// Open a connection to Discord
